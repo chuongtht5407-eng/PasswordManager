@@ -1,0 +1,16 @@
+# Bỏ qua các file rác của Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Bỏ qua môi trường ảo
+venv/
+env/
+
+# QUAN TRỌNG: KHÔNG ĐẨY DATABASE LÊN GITHUB
+*.db
+*.sqlite3
+password_manager.db
+
+# Bỏ qua file cấu hình của VS Code
+.vscode/
