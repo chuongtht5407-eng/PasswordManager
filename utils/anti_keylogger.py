@@ -1,4 +1,3 @@
-# File utils/anti_keylogger.py - Chờ cập nhật code
 import pyperclip
 import threading
 import time

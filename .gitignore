@@ -14,3 +14,15 @@ password_manager.db
 
 # Bỏ qua file cấu hình của VS Code
 .vscode/
+# Bỏ qua thư mục sinh ra khi đóng gói PyInstaller
+build/
+dist/
+*.spec
+filerun/
+
+# Bỏ qua các file bộ nhớ đệm của Python
+__pycache__/
+*.pyc
+
+# ⚠️ CỰC KỲ QUAN TRỌNG: Bỏ qua Database chứa mật khẩu thật của bạn
+password_manager.db
