@@ -389,25 +389,37 @@ class PasswordManagerApp(ctk.CTk):
         self.clear_screen()
         self._set_active_screen("recovery")
 
-        card = ctk.CTkFrame(self, fg_color=PANEL_COLOR, corner_radius=20, border_width=1, border_color="#2E3250", width=600, height=380)
+        card = ctk.CTkFrame(self, fg_color=PANEL_COLOR, corner_radius=20, border_width=1, border_color="#2E3250", width=600, height=520)
         card.place(relx=0.5, rely=0.5, anchor="center")
 
         title = ctk.CTkLabel(card, text="🔑 KHÔI PHỤC TÀI KHOẢN", font=("Segoe UI", 26, "bold"), text_color=ACCENT_COLOR)
         title.pack(pady=(30, 10))
 
-        subtitle = ctk.CTkLabel(card, text="Nhập Recovery Key để đặt lại Master Password (dữ liệu cũ sẽ bị xóa).",
+        subtitle = ctk.CTkLabel(card, text="Nhập Recovery Key và đặt lại Master Password mới. Dữ liệu cũ vẫn được giữ nguyên sau khi recovery thành công.",
                                 font=("Segoe UI", 13), text_color=SUBTEXT_COLOR, wraplength=520, justify="center")
         subtitle.pack(pady=(0, 20), padx=20)
 
         self.recovery_entry = ctk.CTkEntry(card, placeholder_text="Nhập Recovery Key", width=450, height=48,
                                            corner_radius=12, border_width=1, font=("Segoe UI", 16))
-        self.recovery_entry.pack(pady=10)
+        self.recovery_entry.pack(pady=(0, 10))
 
-        btn_verify = ctk.CTkButton(card, text="XÁC THỰC Recovery Key", font=("Segoe UI", 15, "bold"),
+        self.new_password_entry = ctk.CTkEntry(card, placeholder_text="Nhập Master Password mới", width=450, height=48,
+                                                corner_radius=12, border_width=1, font=("Segoe UI", 16), show='*')
+        self.new_password_entry.pack(pady=(0, 10))
+
+        self.confirm_password_entry = ctk.CTkEntry(card, placeholder_text="Xác nhận Master Password mới", width=450, height=48,
+                                                    corner_radius=12, border_width=1, font=("Segoe UI", 16), show='*')
+        self.confirm_password_entry.pack(pady=(0, 10))
+
+        note = ctk.CTkLabel(card, text="Lưu ý: Recovery Key sẽ chỉ sử dụng được một lần. Sau khi thay mật khẩu, bạn cần tạo lại Recovery Key.",
+                             font=("Segoe UI", 12), text_color=SUBTEXT_COLOR, wraplength=520, justify="center")
+        note.pack(pady=(8, 16), padx=20)
+
+        btn_verify = ctk.CTkButton(card, text="Đặt lại Master Password", font=("Segoe UI", 15, "bold"),
                                    width=450, height=48, corner_radius=14,
                                    fg_color=ACCENT_COLOR, hover_color=ACCENT_HOVER,
                                    command=self.verify_recovery_key_action)
-        btn_verify.pack(pady=(15, 10))
+        btn_verify.pack(pady=(0, 10))
 
         btn_back = ctk.CTkButton(card, text="Quay lại Đăng nhập", width=220, height=44, corner_radius=14,
                                  fg_color="transparent", hover_color=PANEL_ALT, border_width=1, border_color=ACCENT_COLOR,
@@ -427,12 +439,25 @@ class PasswordManagerApp(ctk.CTk):
             return
 
         if security.verify_recovery_key(recovery_code, stored_hash):
-            confirmed = messagebox.askyesno("Xác nhận khôi phục",
-                                            "Recovery Key hợp lệ. Toàn bộ dữ liệu hiện tại sẽ bị xóa và bạn sẽ cần tạo lại Master Password. Tiếp tục?")
+            new_master_pwd = self.new_password_entry.get().strip()
+            confirm_pwd = self.confirm_password_entry.get().strip()
+            if not new_master_pwd or len(new_master_pwd) < 6:
+                messagebox.showwarning("Cảnh báo", "Master Password phải có ít nhất 6 ký tự.")
+                return
+            if new_master_pwd != confirm_pwd:
+                messagebox.showwarning("Cảnh báo", "Mật khẩu mới và xác nhận mật khẩu không khớp.")
+                return
+
+            confirmed = messagebox.askyesno(
+                "Xác nhận khôi phục",
+                "Recovery Key hợp lệ. Bạn sẽ đặt lại Master Password và giữ nguyên dữ liệu đã lưu. Tiếp tục?"
+            )
             if confirmed:
-                database.reset_all_data()
-                messagebox.showinfo("Đã reset", "Dữ liệu cũ đã bị xóa. Vui lòng tạo lại Master Password mới.")
-                self.show_setup_screen()
+                hashed_pwd = security.hash_master_password(new_master_pwd)
+                salt = os.urandom(16)
+                database.update_master_password(hashed_pwd, salt)
+                messagebox.showinfo("Thành công", "Master Password đã được đặt lại. Dữ liệu cũ được giữ nguyên. Vui lòng đăng nhập lại.")
+                self.show_login_screen()
         else:
             messagebox.showerror("Lỗi", "Recovery Key không chính xác. Vui lòng thử lại.")
             self.recovery_entry.delete(0, 'end')

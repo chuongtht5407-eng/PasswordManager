@@ -173,6 +173,19 @@ def has_recovery_key() -> bool:
     return get_recovery_hash() is not None
 
 
+def update_master_password(new_password_hash: str, new_salt: bytes):
+    """Cập nhật Master Password mới mà không xóa dữ liệu vault. Đồng thời xóa recovery_hash để vô hiệu hóa recovery key."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE master_user
+        SET password_hash = ?, salt = ?, recovery_hash = NULL
+        WHERE id = 1
+    """, (new_password_hash, new_salt))
+    conn.commit()
+    conn.close()
+
+
 def reset_all_data():
 
     """Xóa toàn bộ dữ liệu vault và thông tin master để cấu hình lại từ đầu"""
