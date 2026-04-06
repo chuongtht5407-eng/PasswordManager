@@ -1,57 +1,66 @@
 # 🛡️ Secure Password Manager Pro
 
-## 1. 🌟 Tổng quan về ứng dụng
-* **Mô hình hoạt động:** Đây là một ứng dụng **Desktop Offline** (chạy cục bộ trên máy tính, hoàn toàn không cần kết nối internet).
-* **Mục đích:** Đóng vai trò như một "Chiếc két sắt kỹ thuật số". Thay vì phải ghi nhớ hàng tá mật khẩu Facebook, Zalo, Ngân hàng... bạn chỉ cần nhớ **MỘT Mật Khẩu Chủ (Master Password)** duy nhất.
-* **Triết lý bảo mật:** **"Zero-Knowledge"** (Không ai biết, kể cả hệ thống). Mọi dữ liệu đều được mã hóa cục bộ ngay trên máy của bạn. Dù ai đó có ăn cắp được file database `password_manager.db`, họ cũng chỉ nhìn thấy những đoạn mã loằng ngoằng vô nghĩa nếu không có Master Password.
+## 📋 Báo Cáo Tóm Tắt Ứng Dụng Quản Lý Mật Khẩu
 
----
+### 🌟 Tổng Quan
+Ứng dụng **Secure Password Manager Pro** là một phần mềm quản lý mật khẩu cá nhân được phát triển bằng **Python**, sử dụng giao diện đồ họa **CustomTkinter** với theme tối chuyên nghiệp. Ứng dụng lưu trữ mật khẩu của các tài khoản trực tuyến một cách an toàn, mã hóa toàn bộ dữ liệu bằng thuật toán **AES-256** và bảo vệ bằng **Master Password**.
 
-## 2. 🔐 Các tính năng bảo mật cốt lõi ("Ăn tiền")
+### 🏗️ Kiến Trúc Hệ Thống
+- **Ngôn ngữ lập trình**: Python 3.x
+- **Giao diện người dùng**: CustomTkinter (dark theme)
+- **Cơ sở dữ liệu**: SQLite (file `password_manager.db`)
+- **Bảo mật**:
+  - Mã hóa **AES-256** qua Fernet (cryptography library)
+  - Băm mật khẩu bằng **PBKDF2-SHA256** (passlib)
+  - Salt ngẫu nhiên cho mỗi tài khoản
+  - **Recovery Key** cho khôi phục
+- **Các module phụ**: Tạo mật khẩu mạnh, bàn phím ảo chống keylogger
 
-* **🛡️ Tầng 1: Chống Keylogger bằng Bàn phím ảo (Virtual Keyboard)**
-  * **Vấn đề:** Nếu máy bị nhiễm virus theo dõi bàn phím (Keylogger), hacker có thể ghi lại được lúc bạn gõ mật khẩu.
-  * **Giải pháp:** Tích hợp Bàn phím ảo trên màn hình đăng nhập. Người dùng thao tác bằng chuột, vô hiệu hóa hoàn toàn các phần mềm Keylogger.
+### 🚀 Các Tính Năng Chính
 
-* **🛡️ Tầng 2: Băm mật khẩu & Thêm "Muối" (Hash & Salt)**
-  * **Hoạt động:** Master Password KHÔNG bao giờ được lưu trực tiếp vào Database. Hệ thống sinh ra một chuỗi ngẫu nhiên (`Salt`), trộn chung với mật khẩu, và băm nát bằng thuật toán **SHA-256**.
-  * **Hiệu quả:** Chống lại các cuộc tấn công dò bảng băm (Rainbow table attacks).
+#### 1. ⚙️ Thiết Lập Ban Đầu
+- **Tạo Master Password**: Người dùng nhập mật khẩu chính (tối thiểu 6 ký tự) để bảo vệ toàn bộ kho dữ liệu.
+- **Tạo Recovery Key**: Tự động tạo một khóa khôi phục ngẫu nhiên (32 ký tự) để sử dụng trong trường hợp quên Master Password. Khóa này chỉ hiển thị một lần và phải được lưu trữ an toàn.
+- **Mã hóa dữ liệu**: Master Password được băm và sử dụng để tạo khóa mã hóa cho toàn bộ vault.
 
-* **🛡️ Tầng 3: Mã hóa dữ liệu bằng chuẩn Quân đội (AES-256)**
-  * **Hoạt động:** Sử dụng Master Password làm "chìa khóa" (Key) để mã hóa toàn bộ mật khẩu các tài khoản bằng chuẩn **AES-256** (Chuẩn bảo mật cao nhất hiện nay, được các ngân hàng sử dụng).
-  * **Hiệu quả:** Trong Database chỉ chứa dữ liệu đã mã hóa. Chỉ khi đăng nhập thành công, hệ thống mới dùng Key để giải mã và hiển thị.
+#### 2. 🔒 Đăng Nhập và Xác Thực
+- **Đăng nhập bằng Master Password**: Nhập mật khẩu chính để truy cập ứng dụng.
+- **Bàn phím ảo**: Giao diện bàn phím ảo chống keylogger khi nhập Master Password.
+- **Thiết lập/Đổi Recovery Key**: Sau khi đăng nhập thành công, người dùng có thể tạo hoặc cập nhật Recovery Key mới.
 
-* **🛡️ Tầng 4: Tự động xóa Clipboard (Chống đọc lén bộ nhớ tạm)**
-  * **Vấn đề:** Khi copy mật khẩu, dữ liệu nằm trong Clipboard. Người khác dùng máy có thể dán (Ctrl+V) ra để lấy cắp.
-  * **Giải pháp:** Tính năng an toàn tự động đếm ngược **10 giây**. Sau 10 giây, bộ nhớ Clipboard tự động bị xóa sạch.
+#### 3. 📂 Quản Lý Kho Mật Khẩu (Vault)
+- **Thêm mật khẩu mới**: Nhập tên ứng dụng/website, tài khoản/email, và mật khẩu. Mật khẩu được mã hóa trước khi lưu.
+- **Tạo mật khẩu mạnh**: Nút "⚡ MẠNH" tự động tạo mật khẩu ngẫu nhiên 16 ký tự (bao gồm chữ hoa, chữ thường, số, ký tự đặc biệt).
+- **Xem danh sách**: Hiển thị tất cả mật khẩu đã lưu với thông tin thống kê (tổng số mật khẩu, trạng thái an toàn).
+- **Tìm kiếm**: Ô tìm kiếm theo tên ứng dụng hoặc tài khoản, lọc kết quả theo thời gian thực.
+- **Sao chép mật khẩu**: Nút "Copy" để sao chép mật khẩu đã giải mã vào clipboard một cách an toàn (chống keylogger).
+- **Xóa mật khẩu**: Xóa từng entry với xác nhận.
 
-* **🛡️ Tầng 5: Thuật toán đổi mật khẩu chủ phức tạp (Re-encryption)**
-  * **Hoạt động:** Khi đổi Master Password, hệ thống sẽ tự động giải mã toàn bộ dữ liệu bằng pass cũ, sau đó **mã hóa lại từ đầu** bằng pass mới, đảm bảo tính toàn vẹn tuyệt đối.
+#### 4. 🛡️ Bảo Mật và Khôi Phục
+- **Mã hóa toàn bộ**: Tất cả mật khẩu được mã hóa bằng khóa AES-256 được tạo từ Master Password và salt.
+- **Recovery Key**: Nếu quên Master Password, nhập Recovery Key để reset toàn bộ dữ liệu và tạo Master Password mới.
+- **Đăng xuất**: Xóa khóa mã hóa khỏi bộ nhớ khi đăng xuất.
 
----
+#### 5. 🎨 Giao Diện Người Dùng
+- **Thiết kế chuyên nghiệp**: Theme tối với màu sắc xanh lá (#34D399) và đỏ (#EF4444) cho các nút quan trọng.
+- **Responsive**: Giao diện thích ứng với kích thước cửa sổ (tối thiểu 960x700).
+- **Trải nghiệm người dùng**: Các màn hình riêng biệt cho setup, login, dashboard, và recovery. Hỗ trợ phím Enter để nhanh chóng.
 
-## 3. 📂 Cấu trúc mã nguồn (Architecture)
-Hệ thống được thiết kế theo tiêu chuẩn module hóa, dễ dàng bảo trì và phát triển:
+### 🗄️ Cơ Sở Dữ Liệu
+- **Bảng master_user**: Lưu hash Master Password, salt, và hash Recovery Key (chỉ 1 dòng).
+- **Bảng vault**: Lưu các entry mật khẩu (id, app_name, username, encrypted_password).
 
-```text
-📦 PasswordManager
-├── 📜 main.py               # File trung tâm, khởi chạy toàn bộ ứng dụng
-├── 📂 frontend/
-│   └── 📜 gui.py            # Giao diện Dark Mode hiện đại bằng CustomTkinter
-├── 📂 backend/
-│   ├── 📜 database.py       # Giao tiếp SQLite chuẩn mực, chống lỗi "Database is locked"
-│   └── 📜 security.py       # Chuyên gia bảo mật (Hàm băm SHA-256, mã hóa AES)
-├── 📂 utils/
-│   ├── 📜 anti_keylogger.py # Xử lý logic Bàn phím ảo (Virtual Keyboard)
-│   └── 📜 password_gen.py   # Công cụ tạo mật khẩu ngẫu nhiên siêu mạnh
-└── 📜 requirements.txt      # Danh sách thư viện cần thiết
+### 🔐 Bảo Mật và An Toàn
+- **Thuật toán mã hóa**: AES-256 với PBKDF2 (480.000 iterations) chống brute-force.
+- **Băm mật khẩu**: PBKDF2-SHA256 cho Master Password và Recovery Key.
+- **Chống keylogger**: Bàn phím ảo và sao chép an toàn.
+- **Recovery**: Reset dữ liệu nếu cần, nhưng không khôi phục dữ liệu cũ (thiết kế bảo mật).
 
-4. 🔄 Tóm tắt luồng hoạt động (Workflow):
+### ⚠️ Hạn Chế và Lưu Ý
+- Không hỗ trợ đồng bộ hóa đám mây hoặc đa thiết bị.
+- Recovery Key chỉ cho phép reset, không khôi phục dữ liệu cũ.
+- Phụ thuộc vào file database SQLite cục bộ.
 
-Mở App lần đầu: App thấy database trống ➔ Yêu cầu tạo Master Password ➔ Trộn Salt ➔ Băm SHA-256 ➔ Lưu vào Database.
+### 🎯 Kết Luận
+Ứng dụng cung cấp giải pháp quản lý mật khẩu cá nhân **an toàn**, **dễ sử dụng** với giao diện thân thiện. Các tính năng bảo mật cấp công nghiệp đảm bảo dữ liệu được bảo vệ tốt, phù hợp cho cá nhân sử dụng hàng ngày.
 
-Mở App lần 2: Yêu cầu nhập Master Password qua bàn phím ảo ➔ Băm ra và so sánh với Database ➔ Khớp thì cho phép đăng nhập.
-
-Thêm tài khoản mới: Nhập mật khẩu gốc (VD: "123456") ➔ Hệ thống dùng Master Password mã hóa thành b'gAAAAAB...' ➔ Lưu phần đã mã hóa vào SQLite.
-
-Copy ra dùng: Bấm "Copy" ➔ Hệ thống giải mã lại ➔ Đưa vào Clipboard ➔ Đếm 10 giây ➔ Xóa sạch Clipboard!
