@@ -1,16 +1,20 @@
+import os
 import customtkinter as ctk
 from tkinter import messagebox
 from backend import database, security
 from utils import password_gen, anti_keylogger
 
 # --- CẤU HÌNH MÀU SẮC CHUẨN PRO (DARK THEME) ---
-BG_COLOR = "#181824"          
-PANEL_COLOR = "#252538"       
-ACCENT_COLOR = "#00B4D8"      
-ACCENT_HOVER = "#0096C7"      
-DANGER_COLOR = "#E63946"      
-DANGER_HOVER = "#C1121F"
-SUCCESS_COLOR = "#2A9D8F"     
+BG_COLOR = "#151625"
+PANEL_COLOR = "#1F2240"
+PANEL_ALT = "#262A4B"
+ACCENT_COLOR = "#34D399"
+ACCENT_HOVER = "#22C55E"
+DANGER_COLOR = "#EF4444"
+DANGER_HOVER = "#DC2626"
+SUCCESS_COLOR = "#10B981"
+TEXT_COLOR = "#E2E8F0"
+SUBTEXT_COLOR = "#94A3B8"
 
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
@@ -19,11 +23,15 @@ class PasswordManagerApp(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("🛡️ Secure Password Manager Pro")
-        self.geometry("900x680") # Kéo dài form ra một chút để chứa thanh search
+        self.geometry("980x720")
+        self.minsize(960, 700)
         self.configure(fg_color=BG_COLOR)
-        
-        self.master_key = None 
-        
+        self.grid_rowconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        self.master_key = None
+        self.active_screen = None
+
         if database.has_master_account():
             self.show_login_screen()
         else:
@@ -33,28 +41,46 @@ class PasswordManagerApp(ctk.CTk):
         for widget in self.winfo_children():
             widget.destroy()
 
+    def _set_active_screen(self, name):
+        self.active_screen = name
+        self.bind("<Return>", self.handle_enter)
+
+    def handle_enter(self, event):
+        if self.active_screen == "setup":
+            self.save_master_password()
+        elif self.active_screen == "login":
+            self.verify_login()
+        elif self.active_screen == "recovery":
+            self.verify_recovery_key_action()
+
     # ================= 1. MÀN HÌNH SETUP =================
     def show_setup_screen(self):
         self.clear_screen()
-        
-        card = ctk.CTkFrame(self, fg_color=PANEL_COLOR, corner_radius=15)
+        self._set_active_screen("setup")
+
+        card = ctk.CTkFrame(self, fg_color=PANEL_COLOR, corner_radius=20, border_width=1, border_color="#2E3250", width=540, height=380)
         card.place(relx=0.5, rely=0.5, anchor="center")
-        
+
         title = ctk.CTkLabel(card, text="⚙️ THIẾT LẬP HỆ THỐNG", font=("Segoe UI", 26, "bold"), text_color=ACCENT_COLOR)
-        title.pack(pady=(30, 10), padx=40)
-        
-        info = ctk.CTkLabel(card, text="Hãy tạo Mật khẩu Master để mã hóa dữ liệu.\nTuyệt đối không được quên mật khẩu này!", 
-                            font=("Segoe UI", 13), text_color="#A6A6B0")
-        info.pack(pady=(0, 20))
-        
-        self.setup_entry = ctk.CTkEntry(card, placeholder_text="Nhập Master Password", show="●", 
-                                        width=320, height=45, corner_radius=8, border_width=1, font=("Segoe UI", 16))
+        title.pack(pady=(30, 10))
+
+        info = ctk.CTkLabel(card,
+                            text="Tạo ngay mật khẩu Master an toàn để mã hóa toàn bộ dữ liệu của bạn.",
+                            font=("Segoe UI", 13), text_color=SUBTEXT_COLOR, wraplength=460, justify="center")
+        info.pack(pady=(0, 20), padx=20)
+
+        self.setup_entry = ctk.CTkEntry(card, placeholder_text="Nhập Master Password", show="●",
+                                        width=420, height=48, corner_radius=12, border_width=1, font=("Segoe UI", 16))
         self.setup_entry.pack(pady=10)
-        
-        btn_save = ctk.CTkButton(card, text="KHỞI TẠO KHO LƯU TRỮ", font=("Segoe UI", 14, "bold"), 
-                                 width=320, height=45, corner_radius=8, 
+
+        btn_save = ctk.CTkButton(card, text="KHỞI TẠO KHO LƯU TRỮ", font=("Segoe UI", 15, "bold"),
+                                 width=420, height=48, corner_radius=14,
                                  fg_color=ACCENT_COLOR, hover_color=ACCENT_HOVER, command=self.save_master_password)
-        btn_save.pack(pady=(20, 30))
+        btn_save.pack(pady=(20, 15))
+
+        hint = ctk.CTkLabel(card, text="Mật khẩu dài ít nhất 6 ký tự. Giữ bí mật và an toàn.",
+                            font=("Segoe UI", 12), text_color=SUBTEXT_COLOR)
+        hint.pack()
 
     def save_master_password(self):
         pwd = self.setup_entry.get()
@@ -63,45 +89,63 @@ class PasswordManagerApp(ctk.CTk):
             return
             
         import os
-        salt = os.urandom(16) 
+        salt = os.urandom(16)
         hashed_pwd = security.hash_master_password(pwd)
+        recovery_key = security.generate_recovery_key()
+        recovery_hash = security.hash_recovery_key(recovery_key)
         
-        database.setup_master_account(hashed_pwd, salt)
-        messagebox.showinfo("Thành công", "Thiết lập hoàn tất! Vui lòng đăng nhập.")
-        self.show_login_screen()
+        database.setup_master_account(hashed_pwd, salt, recovery_hash)
+        self.show_recovery_key_modal(recovery_key)
 
     # ================= 2. MÀN HÌNH ĐĂNG NHẬP =================
     def show_login_screen(self):
         self.clear_screen()
-        
-        card = ctk.CTkFrame(self, fg_color=PANEL_COLOR, corner_radius=15)
+        self._set_active_screen("login")
+
+        card = ctk.CTkFrame(self, fg_color=PANEL_COLOR, corner_radius=20, border_width=1, border_color="#2E3250", width=600, height=460)
         card.place(relx=0.5, rely=0.5, anchor="center")
-        
+
         title = ctk.CTkLabel(card, text="🔒 MỞ KHÓA BẢO MẬT", font=("Segoe UI", 26, "bold"), text_color=ACCENT_COLOR)
-        title.pack(pady=(30, 20), padx=50)
-        
+        title.pack(pady=(30, 10))
+
+        subtitle = ctk.CTkLabel(card, text="Sử dụng mật khẩu Master để truy cập kho mật khẩu an toàn của bạn.",
+                                font=("Segoe UI", 13), text_color=SUBTEXT_COLOR, wraplength=520, justify="center")
+        subtitle.pack(pady=(0, 20), padx=20)
+
         self.login_entry = ctk.CTkEntry(card, placeholder_text="Nhập Master Password", show="●", justify="center",
-                                        width=350, height=45, corner_radius=8, border_width=1, font=("Segoe UI", 18, "bold"))
+                                        width=450, height=48, corner_radius=12, border_width=1, font=("Segoe UI", 18, "bold"))
         self.login_entry.pack(pady=10)
-        
-        btn_login = ctk.CTkButton(card, text="MỞ KHÓA", font=("Segoe UI", 15, "bold"), 
-                                  width=350, height=45, corner_radius=8, 
+
+        btn_login = ctk.CTkButton(card, text="MỞ KHÓA", font=("Segoe UI", 15, "bold"),
+                                  width=450, height=48, corner_radius=14,
                                   fg_color=ACCENT_COLOR, hover_color=ACCENT_HOVER, command=self.verify_login)
-        btn_login.pack(pady=(10, 20))
-        
-        vkb_label = ctk.CTkLabel(card, text="⌨️ Bàn phím ảo chống Keylogger", font=("Segoe UI", 12), text_color="#A6A6B0")
-        vkb_label.pack(pady=(10, 5))
-        
+        btn_login.pack(pady=(15, 15))
+
+        recovery_label = "Đổi Recovery Key" if database.get_recovery_hash() else "Thiết lập Recovery Key"
+        btn_setup_recovery = ctk.CTkButton(card, text=recovery_label, width=220, height=40, corner_radius=12,
+                                           fg_color="transparent", hover_color=PANEL_ALT, border_width=1,
+                                           border_color=ACCENT_COLOR, text_color=ACCENT_COLOR,
+                                           command=self.setup_recovery_key)
+        btn_setup_recovery.pack(pady=(0, 10))
+
+        info = ctk.CTkLabel(card, text="⌨️ Bàn phím ảo chống Keylogger", font=("Segoe UI", 12), text_color=SUBTEXT_COLOR)
+        info.pack(pady=(5, 5))
+
+        btn_forgot = ctk.CTkButton(card, text="Quên mật khẩu Master?", width=220, height=40, corner_radius=12,
+                                   fg_color="transparent", hover_color=PANEL_ALT, border_width=1, border_color=ACCENT_COLOR,
+                                   text_color=ACCENT_COLOR, command=self.show_recovery_screen)
+        btn_forgot.pack(pady=(0, 10))
+
         keyboard_frame = ctk.CTkFrame(card, fg_color="transparent")
-        keyboard_frame.pack(pady=(0, 30))
-        
+        keyboard_frame.pack(pady=(0, 20))
+
         layout = anti_keylogger.get_virtual_keyboard_layout()
         for row in layout:
             row_frame = ctk.CTkFrame(keyboard_frame, fg_color="transparent")
-            row_frame.pack(pady=3)
+            row_frame.pack(pady=4)
             for key in row:
-                btn = ctk.CTkButton(row_frame, text=key, width=45, height=45, font=("Consolas", 16, "bold"),
-                                    fg_color="#3A3A4D", hover_color=ACCENT_HOVER, text_color="white", corner_radius=8,
+                btn = ctk.CTkButton(row_frame, text=key, width=44, height=44, font=("Consolas", 15, "bold"),
+                                    fg_color=PANEL_ALT, hover_color=ACCENT_HOVER, text_color=TEXT_COLOR, corner_radius=10,
                                     command=lambda k=key: self.login_entry.insert("end", k))
                 btn.pack(side="left", padx=3)
 
@@ -116,56 +160,103 @@ class PasswordManagerApp(ctk.CTk):
             messagebox.showerror("Lỗi Cửa", "Sai Master Password! Kẻ xâm nhập bị từ chối.")
             self.login_entry.delete(0, 'end')
 
+    def setup_recovery_key(self):
+        pwd = self.login_entry.get().strip()
+        if not pwd:
+            messagebox.showwarning("Cảnh báo", "Vui lòng nhập Master Password để xác thực trước khi tạo Recovery Key.")
+            return
+
+        stored_data = database.get_master_data()
+        if not stored_data or not security.verify_master_password(pwd, stored_data[0]):
+            messagebox.showerror("Lỗi", "Master Password không chính xác. Không thể tạo Recovery Key.")
+            self.login_entry.delete(0, 'end')
+            return
+
+        recovery_key = security.generate_recovery_key()
+        recovery_hash = security.hash_recovery_key(recovery_key)
+        database.set_recovery_hash(recovery_hash)
+
+        messagebox.showinfo("Recovery Key", "Recovery Key đã được tạo. Hãy lưu cẩn thận để có thể khôi phục trong trường hợp quên Master Password.")
+        self.show_recovery_key_modal(recovery_key)
+
     # ================= 3. MÀN HÌNH DASHBOARD =================
     def show_dashboard(self):
         self.clear_screen()
-        
-        # --- Thanh Header ---
-        header = ctk.CTkFrame(self, height=70, fg_color=PANEL_COLOR, corner_radius=0)
-        header.pack(fill="x")
-        
-        title = ctk.CTkLabel(header, text="🛡️ KHO MẬT KHẨU CÁ NHÂN", font=("Segoe UI", 20, "bold"), text_color=ACCENT_COLOR)
-        title.pack(side="left", padx=30, pady=20)
-        
-        btn_logout = ctk.CTkButton(header, text="Đăng Xuất", width=120, height=35, corner_radius=8, font=("Segoe UI", 13, "bold"),
+        self._set_active_screen(None)
+
+        self.grid_rowconfigure(1, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+
+        header = ctk.CTkFrame(self, height=100, fg_color=PANEL_COLOR, corner_radius=0, border_width=1, border_color="#2E3250")
+        header.grid(row=0, column=0, sticky="nsew", padx=20, pady=(20, 10))
+        header.grid_columnconfigure(1, weight=1)
+
+        title = ctk.CTkLabel(header, text="🛡️ KHO MẬT KHẨU CÁ NHÂN", font=("Segoe UI", 22, "bold"), text_color=ACCENT_COLOR)
+        title.grid(row=0, column=0, sticky="w", padx=24, pady=22)
+
+        btn_logout = ctk.CTkButton(header, text="Đăng Xuất", width=120, height=38, corner_radius=12,
                                    fg_color=DANGER_COLOR, hover_color=DANGER_HOVER, command=self.logout)
-        btn_logout.pack(side="right", padx=30)
-        
-        # --- Panel Thêm Mới ---
-        add_frame = ctk.CTkFrame(self, fg_color=PANEL_COLOR, corner_radius=10)
-        add_frame.pack(fill="x", padx=30, pady=20)
-        
-        self.app_entry = ctk.CTkEntry(add_frame, placeholder_text="Ứng dụng / Website", width=220, height=40)
-        self.app_entry.pack(side="left", padx=(20, 10), pady=20)
-        
-        self.user_entry = ctk.CTkEntry(add_frame, placeholder_text="Tài khoản / Email", width=220, height=40)
-        self.user_entry.pack(side="left", padx=10, pady=20)
-        
-        self.pwd_entry = ctk.CTkEntry(add_frame, placeholder_text="Mật khẩu", width=200, height=40)
-        self.pwd_entry.pack(side="left", padx=10, pady=20)
-        
-        btn_gen = ctk.CTkButton(add_frame, text="⚡ MẠNH", width=70, height=40, corner_radius=8,
-                                fg_color="#FCA311", hover_color="#E59800", text_color="black", font=("Arial", 12, "bold"), command=self.fill_generated_password)
-        btn_gen.pack(side="left", padx=5)
-        
-        btn_add = ctk.CTkButton(add_frame, text="LƯU LẠI", width=100, height=40, corner_radius=8, font=("Segoe UI", 13, "bold"),
-                                fg_color=SUCCESS_COLOR, hover_color="#21867A", command=self.save_new_password)
-        btn_add.pack(side="right", padx=20)
-        
-        # --- Khu vực Tìm Kiếm (MỚI) ---
-        search_frame = ctk.CTkFrame(self, fg_color="transparent")
-        search_frame.pack(fill="x", padx=30, pady=(0, 10))
-        
-        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="🔍 Gõ để tìm kiếm App hoặc Username...", 
-                                         width=350, height=35, corner_radius=8, border_width=1, border_color="#3A3A4D")
-        self.search_entry.pack(side="left")
-        # Bắt sự kiện mỗi khi người dùng nhả phím (gõ chữ) thì sẽ gọi hàm lọc
+        btn_logout.grid(row=0, column=2, sticky="e", padx=24, pady=22)
+
+        stats_frame = ctk.CTkFrame(header, fg_color=PANEL_ALT, corner_radius=14, border_width=1, border_color="#2E3250")
+        stats_frame.grid(row=1, column=0, columnspan=3, sticky="ew", padx=24, pady=(0, 18))
+        stats_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        self.total_label = ctk.CTkLabel(stats_frame, text="0", font=("Segoe UI", 24, "bold"), text_color=TEXT_COLOR)
+        self.total_label.grid(row=0, column=0, padx=20, pady=(20, 10), sticky="w")
+        total_caption = ctk.CTkLabel(stats_frame, text="Mật khẩu đã lưu", font=("Segoe UI", 12), text_color=SUBTEXT_COLOR)
+        total_caption.grid(row=1, column=0, padx=20, pady=(0, 20), sticky="w")
+
+        self.safe_label = ctk.CTkLabel(stats_frame, text="AN TOÀN", font=("Segoe UI", 24, "bold"), text_color=ACCENT_COLOR)
+        self.safe_label.grid(row=0, column=1, padx=20, pady=(20, 10), sticky="w")
+        safe_caption = ctk.CTkLabel(stats_frame, text="Dữ liệu được mã hóa", font=("Segoe UI", 12), text_color=SUBTEXT_COLOR)
+        safe_caption.grid(row=1, column=1, padx=20, pady=(0, 20), sticky="w")
+
+        self.recent_label = ctk.CTkLabel(stats_frame, text="SẴN SÀNG", font=("Segoe UI", 24, "bold"), text_color=TEXT_COLOR)
+        self.recent_label.grid(row=0, column=2, padx=20, pady=(20, 10), sticky="w")
+        recent_caption = ctk.CTkLabel(stats_frame, text="Truy cập nhanh, quản lý dễ dàng", font=("Segoe UI", 12), text_color=SUBTEXT_COLOR)
+        recent_caption.grid(row=1, column=2, padx=20, pady=(0, 20), sticky="w")
+
+        content = ctk.CTkFrame(self, fg_color="transparent")
+        content.grid(row=1, column=0, sticky="nsew", padx=20, pady=(0, 20))
+        content.grid_rowconfigure(2, weight=1)
+        content.grid_columnconfigure(0, weight=1)
+
+        add_frame = ctk.CTkFrame(content, fg_color=PANEL_COLOR, corner_radius=16, border_width=1, border_color="#2E3250")
+        add_frame.grid(row=0, column=0, sticky="ew", padx=0, pady=(0, 12))
+        add_frame.grid_columnconfigure((0, 1, 2, 3, 4), weight=1)
+
+        self.app_entry = ctk.CTkEntry(add_frame, placeholder_text="Ứng dụng / Website", width=220, height=44, corner_radius=14)
+        self.app_entry.grid(row=0, column=0, padx=(20, 10), pady=18, sticky="ew")
+
+        self.user_entry = ctk.CTkEntry(add_frame, placeholder_text="Tài khoản / Email", width=220, height=44, corner_radius=14)
+        self.user_entry.grid(row=0, column=1, padx=10, pady=18, sticky="ew")
+
+        self.pwd_entry = ctk.CTkEntry(add_frame, placeholder_text="Mật khẩu", width=220, height=44, corner_radius=14)
+        self.pwd_entry.grid(row=0, column=2, padx=10, pady=18, sticky="ew")
+
+        btn_gen = ctk.CTkButton(add_frame, text="⚡ MẠNH", width=96, height=44, corner_radius=14,
+                                fg_color="#F59E0B", hover_color="#D97706", text_color="black", font=("Arial", 12, "bold"),
+                                command=self.fill_generated_password)
+        btn_gen.grid(row=0, column=3, padx=(10, 10), pady=18, sticky="e")
+
+        btn_add = ctk.CTkButton(add_frame, text="LƯU LẠI", width=120, height=44, corner_radius=14,
+                                fg_color=SUCCESS_COLOR, hover_color="#059669", font=("Segoe UI", 14, "bold"),
+                                command=self.save_new_password)
+        btn_add.grid(row=0, column=4, padx=(0, 20), pady=18)
+
+        search_frame = ctk.CTkFrame(content, fg_color=PANEL_COLOR, corner_radius=16, border_width=1, border_color="#2E3250")
+        search_frame.grid(row=1, column=0, sticky="ew", padx=0, pady=(0, 12))
+        search_frame.grid_columnconfigure(0, weight=1)
+
+        self.search_entry = ctk.CTkEntry(search_frame, placeholder_text="🔍 Gõ để tìm kiếm App hoặc Username...",
+                                         width=360, height=44, corner_radius=14, border_width=1, border_color="#3A3A4D")
+        self.search_entry.grid(row=0, column=0, padx=20, pady=18, sticky="ew")
         self.search_entry.bind("<KeyRelease>", self.filter_passwords)
-        
-        # --- Danh sách Mật Khẩu ---
-        self.list_frame = ctk.CTkScrollableFrame(self, fg_color="transparent", scrollbar_button_color=PANEL_COLOR)
-        self.list_frame.pack(padx=30, pady=(0, 20), fill="both", expand=True)
-        
+
+        self.list_frame = ctk.CTkScrollableFrame(content, fg_color="transparent", scrollbar_button_color=PANEL_COLOR)
+        self.list_frame.grid(row=2, column=0, sticky="nsew", pady=(0, 8))
+
         self.load_passwords()
 
     def filter_passwords(self, event):
@@ -216,8 +307,13 @@ class PasswordManagerApp(ctk.CTk):
             msg = "🔍 Không tìm thấy kết quả nào phù hợp!" if search_query else "Kho lưu trữ trống. Hãy thêm mật khẩu đầu tiên!"
             empty_lbl = ctk.CTkLabel(self.list_frame, text=msg, text_color="#A6A6B0", font=("Segoe UI", 14))
             empty_lbl.pack(pady=40)
+            if hasattr(self, 'total_label'):
+                self.total_label.configure(text="0")
             return
             
+        if hasattr(self, 'total_label'):
+            self.total_label.configure(text=str(len(entries)))
+
         for entry in entries:
             row_id, app, user, enc_pwd = entry
             
@@ -251,3 +347,92 @@ class PasswordManagerApp(ctk.CTk):
     def logout(self):
         self.master_key = None 
         self.show_login_screen()
+
+    def copy_to_clipboard(self, text: str):
+        self.clipboard_clear()
+        self.clipboard_append(text)
+        messagebox.showinfo("Sao chép", "Recovery Key đã được sao chép vào bộ nhớ tạm.")
+
+    def show_recovery_key_modal(self, recovery_key: str):
+        modal = ctk.CTkToplevel(self)
+        modal.title("Recovery Key")
+        modal.geometry("540x260")
+        modal.resizable(False, False)
+        modal.transient(self)
+        modal.grab_set()
+        modal.protocol("WM_DELETE_WINDOW", lambda: [modal.destroy(), self.show_login_screen()])
+
+        frame = ctk.CTkFrame(modal, fg_color=PANEL_COLOR, corner_radius=20, border_width=1, border_color="#2E3250")
+        frame.pack(expand=True, fill="both", padx=20, pady=20)
+
+        title = ctk.CTkLabel(frame, text="🗝️ Recovery Key Đã Tạo", font=("Segoe UI", 22, "bold"), text_color=ACCENT_COLOR)
+        title.pack(pady=(20, 10))
+
+        subtitle = ctk.CTkLabel(frame, text="Lưu lại mã này an toàn. Nếu quên Master Password, bạn sẽ cần nó để khôi phục.",
+                                font=("Segoe UI", 13), text_color=SUBTEXT_COLOR, wraplength=480, justify="center")
+        subtitle.pack(pady=(0, 15), padx=16)
+
+        recovery_entry = ctk.CTkEntry(frame, width=460, height=44, corner_radius=14, font=("Segoe UI", 14))
+        recovery_entry.insert(0, recovery_key)
+        recovery_entry.configure(state="readonly")
+        recovery_entry.pack(pady=(0, 10))
+
+        btn_copy = ctk.CTkButton(frame, text="Sao chép Recovery Key", width=220, height=44, corner_radius=14,
+                                fg_color=ACCENT_COLOR, hover_color=ACCENT_HOVER, command=lambda: self.copy_to_clipboard(recovery_key))
+        btn_copy.pack(pady=(0, 12))
+
+        btn_close = ctk.CTkButton(frame, text="Tiếp tục", width=220, height=44, corner_radius=14,
+                                fg_color=SUCCESS_COLOR, hover_color="#059669", command=lambda: [modal.destroy(), self.show_login_screen()])
+        btn_close.pack()
+
+    def show_recovery_screen(self):
+        self.clear_screen()
+        self._set_active_screen("recovery")
+
+        card = ctk.CTkFrame(self, fg_color=PANEL_COLOR, corner_radius=20, border_width=1, border_color="#2E3250", width=600, height=380)
+        card.place(relx=0.5, rely=0.5, anchor="center")
+
+        title = ctk.CTkLabel(card, text="🔑 KHÔI PHỤC TÀI KHOẢN", font=("Segoe UI", 26, "bold"), text_color=ACCENT_COLOR)
+        title.pack(pady=(30, 10))
+
+        subtitle = ctk.CTkLabel(card, text="Nhập Recovery Key để đặt lại Master Password (dữ liệu cũ sẽ bị xóa).",
+                                font=("Segoe UI", 13), text_color=SUBTEXT_COLOR, wraplength=520, justify="center")
+        subtitle.pack(pady=(0, 20), padx=20)
+
+        self.recovery_entry = ctk.CTkEntry(card, placeholder_text="Nhập Recovery Key", width=450, height=48,
+                                           corner_radius=12, border_width=1, font=("Segoe UI", 16))
+        self.recovery_entry.pack(pady=10)
+
+        btn_verify = ctk.CTkButton(card, text="XÁC THỰC Recovery Key", font=("Segoe UI", 15, "bold"),
+                                   width=450, height=48, corner_radius=14,
+                                   fg_color=ACCENT_COLOR, hover_color=ACCENT_HOVER,
+                                   command=self.verify_recovery_key_action)
+        btn_verify.pack(pady=(15, 10))
+
+        btn_back = ctk.CTkButton(card, text="Quay lại Đăng nhập", width=220, height=44, corner_radius=14,
+                                 fg_color="transparent", hover_color=PANEL_ALT, border_width=1, border_color=ACCENT_COLOR,
+                                 text_color=ACCENT_COLOR, command=self.show_login_screen)
+        btn_back.pack()
+
+    def verify_recovery_key_action(self):
+        recovery_code = self.recovery_entry.get().strip()
+        if not recovery_code:
+            messagebox.showwarning("Cảnh báo", "Vui lòng nhập Recovery Key để tiếp tục.")
+            return
+
+        stored_hash = database.get_recovery_hash()
+        if not stored_hash:
+            messagebox.showerror("Lỗi", "Recovery Key chưa được thiết lập hoặc không tồn tại.")
+            self.show_login_screen()
+            return
+
+        if security.verify_recovery_key(recovery_code, stored_hash):
+            confirmed = messagebox.askyesno("Xác nhận khôi phục",
+                                            "Recovery Key hợp lệ. Toàn bộ dữ liệu hiện tại sẽ bị xóa và bạn sẽ cần tạo lại Master Password. Tiếp tục?")
+            if confirmed:
+                database.reset_all_data()
+                messagebox.showinfo("Đã reset", "Dữ liệu cũ đã bị xóa. Vui lòng tạo lại Master Password mới.")
+                self.show_setup_screen()
+        else:
+            messagebox.showerror("Lỗi", "Recovery Key không chính xác. Vui lòng thử lại.")
+            self.recovery_entry.delete(0, 'end')

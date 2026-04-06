@@ -1,6 +1,7 @@
 # File này sẽ băm mật khẩu tổng (Master Password) bằng chuẩn SHA256 và dùng thuật toán AES-256 (thông qua Fernet) để mã hóa các mật khẩu con. Đây là tiêu chuẩn bảo mật cấp công nghiệp.
 import base64
 import os
+import secrets
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -13,6 +14,18 @@ def hash_master_password(password: str) -> str:
 def verify_master_password(password: str, hashed_password: str) -> bool:
     """Kiểm tra xem người dùng nhập Master Password có đúng không"""
     return pbkdf2_sha256.verify(password, hashed_password)
+
+def generate_recovery_key(length: int = 32) -> str:
+    """Tạo Recovery Key ngẫu nhiên cho trường hợp quên Master Password."""
+    return secrets.token_urlsafe(length)
+
+def hash_recovery_key(recovery_key: str) -> str:
+    """Băm Recovery Key để lưu trữ an toàn trong database."""
+    return pbkdf2_sha256.hash(recovery_key)
+
+def verify_recovery_key(recovery_key: str, hashed_recovery_key: str) -> bool:
+    """Xác thực Recovery Key khi người dùng cần khôi phục."""
+    return pbkdf2_sha256.verify(recovery_key, hashed_recovery_key)
 
 def generate_encryption_key(master_password: str, salt: bytes) -> bytes:
     """

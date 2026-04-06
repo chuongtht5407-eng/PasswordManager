@@ -36,13 +36,20 @@ def init_db():
 
             password_hash TEXT NOT NULL,
 
-            salt BLOB NOT NULL
+            salt BLOB NOT NULL,
+
+            recovery_hash TEXT
 
         )
 
     ''')
 
    
+
+    cursor.execute("PRAGMA table_info(master_user)")
+    existing_columns = [row[1] for row in cursor.fetchall()]
+    if "recovery_hash" not in existing_columns:
+        cursor.execute("ALTER TABLE master_user ADD COLUMN recovery_hash TEXT")
 
     # Bảng 2: Lưu các mật khẩu được mã hóa
 
@@ -92,17 +99,17 @@ def has_master_account() -> bool:
 
 
 
-def setup_master_account(password_hash: str, salt: bytes):
+def setup_master_account(password_hash: str, salt: bytes, recovery_hash: str = None):
 
-    """Lưu Master Password và Salt lần đầu tiên"""
+    """Lưu Master Password, Salt và Recovery Hash lần đầu tiên"""
 
     conn = get_connection()
 
     cursor = conn.cursor()
 
-    cursor.execute("INSERT INTO master_user (id, password_hash, salt) VALUES (1, ?, ?)",
+    cursor.execute("INSERT INTO master_user (id, password_hash, salt, recovery_hash) VALUES (1, ?, ?, ?)",
 
-                   (password_hash, salt))
+                   (password_hash, salt, recovery_hash))
 
     conn.commit()
 
@@ -126,6 +133,61 @@ def get_master_data():
 
     return row # Trả về tuple: (password_hash, salt)
 
+
+def set_recovery_hash(recovery_hash: str):
+
+    """Lưu hash của recovery key vào cơ sở dữ liệu"""
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+    cursor.execute("UPDATE master_user SET recovery_hash = ? WHERE id = 1", (recovery_hash,))
+
+    conn.commit()
+
+    conn.close()
+
+
+def get_recovery_hash():
+
+    """Lấy recovery hash để xác thực recovery key"""
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT recovery_hash FROM master_user WHERE id = 1")
+
+    row = cursor.fetchone()
+
+    conn.close()
+
+    return row[0] if row else None
+
+
+def has_recovery_key() -> bool:
+
+    """Kiểm tra xem recovery key đã được cấu hình chưa."""
+
+    return get_recovery_hash() is not None
+
+
+def reset_all_data():
+
+    """Xóa toàn bộ dữ liệu vault và thông tin master để cấu hình lại từ đầu"""
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+    cursor.execute("DELETE FROM vault")
+
+    cursor.execute("DELETE FROM master_user WHERE id = 1")
+
+    conn.commit()
+
+    conn.close()
 
 
 # ======== CÁC HÀM QUẢN LÝ KHO MẬT KHẨU (VAULT) ========
