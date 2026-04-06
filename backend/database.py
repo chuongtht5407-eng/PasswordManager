@@ -38,7 +38,11 @@ def init_db():
 
             salt BLOB NOT NULL,
 
-            recovery_hash TEXT
+            recovery_hash TEXT,
+
+            encrypted_vault_key TEXT,
+
+            recovery_encrypted_vault_key TEXT
 
         )
 
@@ -50,6 +54,10 @@ def init_db():
     existing_columns = [row[1] for row in cursor.fetchall()]
     if "recovery_hash" not in existing_columns:
         cursor.execute("ALTER TABLE master_user ADD COLUMN recovery_hash TEXT")
+    if "encrypted_vault_key" not in existing_columns:
+        cursor.execute("ALTER TABLE master_user ADD COLUMN encrypted_vault_key TEXT")
+    if "recovery_encrypted_vault_key" not in existing_columns:
+        cursor.execute("ALTER TABLE master_user ADD COLUMN recovery_encrypted_vault_key TEXT")
 
     # Bảng 2: Lưu các mật khẩu được mã hóa
 
@@ -99,17 +107,19 @@ def has_master_account() -> bool:
 
 
 
-def setup_master_account(password_hash: str, salt: bytes, recovery_hash: str = None):
+def setup_master_account(password_hash: str, salt: bytes, recovery_hash: str = None,
+                         encrypted_vault_key: str = None, recovery_encrypted_vault_key: str = None):
 
-    """Lưu Master Password, Salt và Recovery Hash lần đầu tiên"""
+    """Lưu Master Password, Salt, Recovery Hash và khóa vault lần đầu tiên"""
 
     conn = get_connection()
 
     cursor = conn.cursor()
 
-    cursor.execute("INSERT INTO master_user (id, password_hash, salt, recovery_hash) VALUES (1, ?, ?, ?)",
-
-                   (password_hash, salt, recovery_hash))
+    cursor.execute(
+        "INSERT INTO master_user (id, password_hash, salt, recovery_hash, encrypted_vault_key, recovery_encrypted_vault_key) VALUES (1, ?, ?, ?, ?, ?)",
+        (password_hash, salt, recovery_hash, encrypted_vault_key, recovery_encrypted_vault_key)
+    )
 
     conn.commit()
 
@@ -119,19 +129,19 @@ def setup_master_account(password_hash: str, salt: bytes, recovery_hash: str = N
 
 def get_master_data():
 
-    """Lấy Hash và Salt để kiểm tra lúc đăng nhập"""
+    """Lấy Hash, Salt và khóa vault để kiểm tra lúc đăng nhập"""
 
     conn = get_connection()
 
     cursor = conn.cursor()
 
-    cursor.execute("SELECT password_hash, salt FROM master_user WHERE id = 1")
+    cursor.execute("SELECT password_hash, salt, encrypted_vault_key, recovery_hash, recovery_encrypted_vault_key FROM master_user WHERE id = 1")
 
     row = cursor.fetchone()
 
     conn.close()
 
-    return row # Trả về tuple: (password_hash, salt)
+    return row # Trả về tuple: (password_hash, salt, encrypted_vault_key, recovery_hash, recovery_encrypted_vault_key)
 
 
 def set_recovery_hash(recovery_hash: str):
@@ -143,6 +153,33 @@ def set_recovery_hash(recovery_hash: str):
     cursor = conn.cursor()
 
     cursor.execute("UPDATE master_user SET recovery_hash = ? WHERE id = 1", (recovery_hash,))
+
+    conn.commit()
+
+    conn.close()
+
+
+def set_recovery_data(recovery_hash: str, recovery_encrypted_vault_key: str, encrypted_vault_key: str = None):
+
+    """Lưu hash recovery và khóa vault mã hóa bằng recovery key."""
+
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+    sql = "UPDATE master_user SET recovery_hash = ?, recovery_encrypted_vault_key = ?"
+
+    params = [recovery_hash, recovery_encrypted_vault_key]
+
+    if encrypted_vault_key is not None:
+
+        sql += ", encrypted_vault_key = ?"
+
+        params.append(encrypted_vault_key)
+
+    sql += " WHERE id = 1"
+
+    cursor.execute(sql, tuple(params))
 
     conn.commit()
 
@@ -173,15 +210,18 @@ def has_recovery_key() -> bool:
     return get_recovery_hash() is not None
 
 
-def update_master_password(new_password_hash: str, new_salt: bytes):
-    """Cập nhật Master Password mới mà không xóa dữ liệu vault. Đồng thời xóa recovery_hash để vô hiệu hóa recovery key."""
+def update_master_password(new_password_hash: str, new_salt: bytes, encrypted_vault_key: str = None):
+    """Cập nhật Master Password mới mà không xóa dữ liệu vault.
+    Nếu có khóa vault mới, cũng lưu lại. Đồng thời xóa recovery_hash và recovery_encrypted_vault_key."""
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE master_user
-        SET password_hash = ?, salt = ?, recovery_hash = NULL
-        WHERE id = 1
-    """, (new_password_hash, new_salt))
+    sql = "UPDATE master_user SET password_hash = ?, salt = ?, recovery_hash = NULL, recovery_encrypted_vault_key = NULL"
+    params = [new_password_hash, new_salt]
+    if encrypted_vault_key is not None:
+        sql += ", encrypted_vault_key = ?"
+        params.append(encrypted_vault_key)
+    sql += " WHERE id = 1"
+    cursor.execute(sql, tuple(params))
     conn.commit()
     conn.close()
 

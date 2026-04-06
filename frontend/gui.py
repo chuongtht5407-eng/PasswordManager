@@ -93,8 +93,20 @@ class PasswordManagerApp(ctk.CTk):
         hashed_pwd = security.hash_master_password(pwd)
         recovery_key = security.generate_recovery_key()
         recovery_hash = security.hash_recovery_key(recovery_key)
-        
-        database.setup_master_account(hashed_pwd, salt, recovery_hash)
+
+        master_key = security.generate_encryption_key(pwd, salt)
+        vault_key = security.generate_vault_key()
+        encrypted_vault_key = security.encrypt_vault_key(vault_key, master_key)
+        recovery_secret = security.generate_encryption_key(recovery_key, salt)
+        recovery_encrypted_vault_key = security.encrypt_vault_key(vault_key, recovery_secret)
+
+        database.setup_master_account(
+            hashed_pwd,
+            salt,
+            recovery_hash,
+            encrypted_vault_key,
+            recovery_encrypted_vault_key
+        )
         self.show_recovery_key_modal(recovery_key)
 
     # ================= 2. MÀN HÌNH ĐĂNG NHẬP =================
@@ -154,7 +166,16 @@ class PasswordManagerApp(ctk.CTk):
         stored_data = database.get_master_data()
         
         if stored_data and security.verify_master_password(pwd, stored_data[0]):
-            self.master_key = security.generate_encryption_key(pwd, stored_data[1])
+            password_key = security.generate_encryption_key(pwd, stored_data[1])
+            if stored_data[2]:
+                try:
+                    self.master_key = security.decrypt_vault_key(stored_data[2], password_key)
+                except Exception:
+                    messagebox.showerror("Lỗi", "Không thể giải mã khóa vault. Dữ liệu bị hỏng hoặc mật khẩu không đúng.")
+                    self.login_entry.delete(0, 'end')
+                    return
+            else:
+                self.master_key = password_key
             self.show_dashboard()
         else:
             messagebox.showerror("Lỗi Cửa", "Sai Master Password! Kẻ xâm nhập bị từ chối.")
@@ -174,7 +195,19 @@ class PasswordManagerApp(ctk.CTk):
 
         recovery_key = security.generate_recovery_key()
         recovery_hash = security.hash_recovery_key(recovery_key)
-        database.set_recovery_hash(recovery_hash)
+
+        password_key = security.generate_encryption_key(pwd, stored_data[1])
+        if stored_data[2]:
+            vault_key = security.decrypt_vault_key(stored_data[2], password_key)
+            encrypted_vault_key = None
+        else:
+            vault_key = password_key
+            encrypted_vault_key = security.encrypt_vault_key(vault_key, password_key)
+
+        recovery_secret = security.generate_encryption_key(recovery_key, stored_data[1])
+        recovery_encrypted_vault_key = security.encrypt_vault_key(vault_key, recovery_secret)
+
+        database.set_recovery_data(recovery_hash, recovery_encrypted_vault_key, encrypted_vault_key=encrypted_vault_key)
 
         messagebox.showinfo("Recovery Key", "Recovery Key đã được tạo. Hãy lưu cẩn thận để có thể khôi phục trong trường hợp quên Master Password.")
         self.show_recovery_key_modal(recovery_key)
@@ -432,8 +465,9 @@ class PasswordManagerApp(ctk.CTk):
             messagebox.showwarning("Cảnh báo", "Vui lòng nhập Recovery Key để tiếp tục.")
             return
 
+        stored_data = database.get_master_data()
         stored_hash = database.get_recovery_hash()
-        if not stored_hash:
+        if not stored_hash or not stored_data:
             messagebox.showerror("Lỗi", "Recovery Key chưa được thiết lập hoặc không tồn tại.")
             self.show_login_screen()
             return
@@ -448,6 +482,18 @@ class PasswordManagerApp(ctk.CTk):
                 messagebox.showwarning("Cảnh báo", "Mật khẩu mới và xác nhận mật khẩu không khớp.")
                 return
 
+            if not stored_data or not stored_data[4]:
+                messagebox.showerror("Lỗi", "Không thể khôi phục dữ liệu cũ vì recovery key chưa được thiết lập đúng cách.")
+                return
+
+            recovery_secret = security.generate_encryption_key(recovery_code, stored_data[1])
+            try:
+                vault_key = security.decrypt_vault_key(stored_data[4], recovery_secret)
+            except Exception:
+                messagebox.showerror("Lỗi", "Recovery Key không hợp lệ hoặc dữ liệu vault bị hỏng.")
+                self.recovery_entry.delete(0, 'end')
+                return
+
             confirmed = messagebox.askyesno(
                 "Xác nhận khôi phục",
                 "Recovery Key hợp lệ. Bạn sẽ đặt lại Master Password và giữ nguyên dữ liệu đã lưu. Tiếp tục?"
@@ -455,7 +501,9 @@ class PasswordManagerApp(ctk.CTk):
             if confirmed:
                 hashed_pwd = security.hash_master_password(new_master_pwd)
                 salt = os.urandom(16)
-                database.update_master_password(hashed_pwd, salt)
+                new_master_key = security.generate_encryption_key(new_master_pwd, salt)
+                encrypted_vault_key = security.encrypt_vault_key(vault_key, new_master_key)
+                database.update_master_password(hashed_pwd, salt, encrypted_vault_key)
                 messagebox.showinfo("Thành công", "Master Password đã được đặt lại. Dữ liệu cũ được giữ nguyên. Vui lòng đăng nhập lại.")
                 self.show_login_screen()
         else:

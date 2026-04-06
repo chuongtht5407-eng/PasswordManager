@@ -40,6 +40,25 @@ def generate_encryption_key(master_password: str, salt: bytes) -> bytes:
     )
     return base64.urlsafe_b64encode(kdf.derive(master_password.encode()))
 
+
+def generate_vault_key() -> bytes:
+    """Tạo khóa vault ngẫu nhiên riêng để mã hóa dữ liệu."""
+    return Fernet.generate_key()
+
+
+def encrypt_vault_key(vault_key: bytes, key: bytes) -> str:
+    """Mã hóa khóa vault bằng một khóa khác (master hoặc recovery)."""
+    f = Fernet(key)
+    encrypted_bytes = f.encrypt(vault_key)
+    return encrypted_bytes.decode('utf-8')
+
+
+def decrypt_vault_key(encrypted_vault_key: str, key: bytes) -> bytes:
+    """Giải mã khóa vault để sử dụng cho mã hóa/giải mã dữ liệu."""
+    f = Fernet(key)
+    return f.decrypt(encrypted_vault_key.encode('utf-8'))
+
+
 def encrypt_data(plain_text: str, key: bytes) -> str:
     """Mã hóa chuỗi văn bản (Mật khẩu các ứng dụng)"""
     f = Fernet(key)
